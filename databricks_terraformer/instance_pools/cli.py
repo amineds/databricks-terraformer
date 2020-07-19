@@ -31,12 +31,11 @@ def export_cli(dry_run, delete, git_ssh_url, api_client: ApiClient, hcl, pattern
         "custom_tags": handle_map
     }
     ignore_attribute_key = {
-        "stats","state","status","default_tags"
+        "stats","state","status","default_tags","instance_pool_id"
     }
     required_attributes_key = {
         "instance_pool_name","min_idle_instances","idle_instance_autotermination_minutes","node_type_id"
     }
-    log.debug(f"dry-run is:{dry_run}")
 
     if hcl:
         pool_api = InstancePoolsApi(api_client)
