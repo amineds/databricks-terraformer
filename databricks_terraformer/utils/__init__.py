@@ -49,6 +49,7 @@ def remove_emoji(text):
                                 "]+", flags=re.UNICODE)
 
     return regrex_pattern.sub(r'' ,text)
+<<<<<<< HEAD
 
 
 def prep_json(block_key_map, ignore_attribute_key, resource, required_attributes_key):
@@ -66,3 +67,5 @@ def prep_json(block_key_map, ignore_attribute_key, resource, required_attributes
             assert type(att) is not dict, f"map/block {att} is not defined"
             pool_resource_data[att] = resource[att]
     return pool_resource_data
+=======
+>>>>>>> 248d77c2a20741fa7f86ec0edb7c32ae500e7394

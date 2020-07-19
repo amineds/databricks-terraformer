@@ -49,7 +49,6 @@ def export_cli(dry_run, delete, git_ssh_url, api_client: ApiClient, hcl, pattern
                     log.debug(f"{pool['instance_pool_name']} did not match pattern function {pattern_matches}")
                     continue
                 log.debug(f"{pool['instance_pool_name']} matched the pattern function {pattern_matches}")
-
                 pool_resource_data = prep_json(block_key_map, ignore_attribute_key, pool, required_attributes_key)
 
                 base_name = normalize_identifier(pool["instance_pool_name"])
