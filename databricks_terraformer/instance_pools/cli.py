@@ -7,9 +7,8 @@ from databricks_terraformer.config import git_url_option, ssh_key_option, delete
 
 from databricks_terraformer import CONTEXT_SETTINGS, log
 from databricks_terraformer.hcl.json_to_hcl import create_hcl_from_json
-from databricks_terraformer.utils import handle_block, handle_map
+from databricks_terraformer.utils import handle_block, handle_map, normalize_identifier
 from databricks_terraformer.utils.git_handler import GitHandler
-from databricks_terraformer.utils.names import gen_valid_name
 from databricks_terraformer.utils.patterns import provide_pattern_func
 from databricks_terraformer.version import print_version_callback, version
 
@@ -68,7 +67,7 @@ def export_cli(dry_run, delete, git_ssh_url, api_client: ApiClient, hcl, pattern
                         pool_resource_data[att] = pool[att]
 
 
-                base_name = gen_valid_name(pool["instance_pool_name"])
+                base_name = normalize_identifier(pool["instance_pool_name"])
                 o_type = "resource"
                 name = "databricks_instance_pool"
                 identifier = f"databricks_instance_pool-{base_name}"
