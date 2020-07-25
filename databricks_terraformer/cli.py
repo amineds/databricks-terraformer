@@ -1,5 +1,6 @@
 import click as click
 import click_log
+from databricks_terraformer.jobs.cli import jobs_group
 
 from databricks_terraformer import CONTEXT_SETTINGS, log
 from databricks_terraformer.apply.cli import destroy_cli, import_cli
@@ -21,6 +22,7 @@ def cli():
 cli.add_command(cluster_policies_group, name="cluster-policies")
 cli.add_command(dbfs_group, name="dbfs")
 cli.add_command(instance_pools_group, name="instance-pools")
+cli.add_command(jobs_group, name="jobs")
 cli.add_command(notebook_group, name="notebooks")
 cli.add_command(import_cli, name="import")
 cli.add_command(destroy_cli, name="destroy")
