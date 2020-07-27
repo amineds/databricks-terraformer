@@ -11,6 +11,7 @@ valid_resources = [
     "databricks_notebook",
     "databricks_instance_pool",
     "databricks_instance_profile",
+    "databricks_secret_scope",
     "jobs",
 ]
 
