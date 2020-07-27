@@ -58,6 +58,8 @@ def export_cli(dry_run, tag, delete, git_ssh_url, api_client: ApiClient, hcl, pa
                     name = "databricks_secret"
                     identifier = f"databricks_secret-{base_name}"
 
+                    secret_resource_data["scope"] = scope["name"]
+
                     secret_hcl = create_hcl_from_json(o_type, name, identifier, secret_resource_data, False)
 
                     file_name_identifier = f"{identifier}.tf"
