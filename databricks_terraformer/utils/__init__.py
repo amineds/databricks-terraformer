@@ -12,6 +12,7 @@ valid_resources = [
     "databricks_instance_pool",
     "databricks_instance_profile",
     "databricks_secret_scope",
+    "databricks_secret",
     "jobs",
 ]
 

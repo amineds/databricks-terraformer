@@ -10,6 +10,7 @@ from databricks_terraformer.instance_pools.cli import instance_pools_group
 from databricks_terraformer.instance_profiles.cli import instance_profiles_group
 from databricks_terraformer.notebooks.cli import notebook_group
 from databricks_terraformer.secret_scopes.cli import secret_scopes_group
+from databricks_terraformer.secrets.cli import secrets_group
 from databricks_terraformer.version import print_version_callback, version
 
 
@@ -28,6 +29,7 @@ cli.add_command(instance_profiles_group, name="instance-profiles")
 cli.add_command(jobs_group, name="jobs")
 cli.add_command(notebook_group, name="notebooks")
 cli.add_command(secret_scopes_group, name="secret-scopes")
+cli.add_command(secrets_group, name="secrets")
 cli.add_command(import_cli, name="import")
 cli.add_command(destroy_cli, name="destroy")
 
