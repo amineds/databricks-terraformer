@@ -10,6 +10,7 @@ valid_resources = [
     "databricks_dbfs_file",
     "databricks_notebook",
     "databricks_instance_pool",
+    "databricks_instance_profile",
     "jobs",
 ]
 
