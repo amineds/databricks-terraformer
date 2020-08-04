@@ -15,6 +15,10 @@ def print_test(ctx, param, value):
             "mappy": {
                 "nested_sub_sub_sub": 123,
                 "test1234": 123
+            },
+            "interpolation": {
+                "@expr:nested_sub_sub_sub": 123,
+                "test1234": 123
             }
         },
         "test": 12345,
