@@ -17,7 +17,7 @@ def print_test(ctx, param, value):
                 "test1234": 123
             },
             "interpolation": {
-                "@expr:nested_sub_sub_sub": 123,
+                "@expr:nested_sub_sub_sub": "var.demo_interpolate_variable",
                 "test1234": 123
             }
         },
