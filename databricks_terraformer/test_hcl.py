@@ -1,9 +1,9 @@
-from databricks_terraformer.hcl.json_to_hcl import create_hcl_from_json
+from databricks_terraformer.hcl.json_to_hcl import create_resource_from_dict
+
 
 def print_test(ctx, param, value):
     import click
 
-    object = "resource"
     type = "cluster"
     name = "my_cluster_cluster-1243424e"
     resource_data = {
@@ -21,7 +21,7 @@ def print_test(ctx, param, value):
         "test2": "string ${upper.lib}"
     }
 
-    output = create_hcl_from_json(object, type, name, resource_data, False)
+    output = create_resource_from_dict(type, name, resource_data, False)
 
     click.echo(output)
     ctx.exit()

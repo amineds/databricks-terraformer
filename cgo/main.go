@@ -152,7 +152,12 @@ func processBody(resourceBody *hclwrite.Body, input map[string]interface{}, debu
 func WriteHCLFromMap(objectType string, input map[string]interface{}, resourceInfo HCLObject, debug bool) string {
 	f := hclwrite.NewEmptyFile()
 	rootBody := f.Body()
-	resourceBlock := rootBody.AppendNewBlock(objectType, []string{resourceInfo.Type, resourceInfo.Name})
+	var resourceBlock *hclwrite.Block
+	if resourceInfo.Type == "" {
+		resourceBlock = rootBody.AppendNewBlock(objectType, []string{resourceInfo.Name})
+	} else {
+		resourceBlock = rootBody.AppendNewBlock(objectType, []string{resourceInfo.Type, resourceInfo.Name})
+	}
 	resourceBody := resourceBlock.Body()
 
 	if input == nil {
