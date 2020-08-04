@@ -82,16 +82,23 @@ func processMap(resourceBody *hclwrite.Body, key string, value interface{}, debu
 
 func processBlock(resourceBody *hclwrite.Body, key string, val interface{}, debug bool) {
 	if strings.HasPrefix(key, BlockPrefix) {
-		block := resourceBody.AppendNewBlock(strings.Replace(key, BlockPrefix,"", 1), nil)
-		valCasted, ok := val.(map[string]interface{})
-		if ok {
-			processBody(block.Body(), valCasted, debug)
+		switch reflect.TypeOf(val).Kind() {
+		case reflect.Slice:
+			for _, v := range val.([]interface{}) {
+				processBlock(resourceBody, key, v, debug)
+			}
+			return
+		case reflect.Map:
+			block := resourceBody.AppendNewBlock(strings.Replace(key, BlockPrefix,"", 1), nil)
+			valCasted, ok := val.(map[string]interface{})
+			if ok {
+				processBody(block.Body(), valCasted, debug)
+			}
+			valInterfaceCasted, ok := val.(map[interface{}]interface{})
+			if ok {
+				processBody(block.Body(), mapInterfaceInterfaceToStringInterface(valInterfaceCasted), debug)
+			}
 		}
-		valInterfaceCasted, ok := val.(map[interface{}]interface{})
-		if ok {
-			processBody(block.Body(), mapInterfaceInterfaceToStringInterface(valInterfaceCasted), debug)
-		}
-
 	}
 }
 
