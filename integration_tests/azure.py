@@ -1,3 +1,5 @@
+import os
+
 from databricks_cli.configure.provider import get_config_for_profile
 from databricks_cli.instance_pools.api import InstancePoolsApi
 from databricks_cli.dbfs.api import DbfsApi, DbfsPath
@@ -13,6 +15,7 @@ api_client = ApiClient(host=config.host, token=config.token)
 
 policy_json = {"name":"test_policy", "definition":"{}"}
 
+#save the jsons in files.
 cluster_json = {
                     "cluster_name": "no pool std cluster 1",
                     "spark_version": "6.5.x-scala2.11",
@@ -79,17 +82,15 @@ cluster_policy_json_list=[
         }
     ]
 
-
 def create_clusters():
     print("Creating clusters")
     cluster_api = ClusterApi(api_client)
     cluster_id = cluster_api.create_cluster(cluster_json)
-    print(cluster_id)
-    cluster_api.delete_cluster(cluster_id["cluster_id"])
+
+    # as we "manually" create a new cluster, we need to update the cleanup list as well
     cluster_json["autotermination_minutes"] = 60
     cluster_json["cluster_name"] = "no pool std cluster 2"
     cluster_id = cluster_api.create_cluster(cluster_json)
-    cluster_api.delete_cluster(cluster_id["cluster_id"])
 
 
 def create_pools():
@@ -107,19 +108,28 @@ def create_policies():
 def upload_dbfs_file():
     print("Upload files to DBFS")
     dbfs_api = DbfsApi(api_client)
-    dbfs_api.put_file("example_notebook.py", DbfsPath("dbfs:/example_notebook.py"), True)
+    path = os.path.dirname(__file__)
+    dbfs_api.put_file(os.path.join(path,"example_notebook.py"), DbfsPath("dbfs:/example_notebook.py"), True)
 
 def upload_notebook():
     print("Upload notebooks")
     workspace_api = WorkspaceApi(api_client)
-    workspace_api.import_workspace("example_notebook.py", "/Shared/example_notebook", "PYTHON", "SOURCE", True)
+    path = os.path.dirname(__file__)
+    workspace_api.import_workspace(os.path.join(path,"example_notebook.py"), "/Shared/example_notebook", "PYTHON", "SOURCE", True)
+
+def create_group_instance_profile():
+    # SCIM API is still in preview and is not reflected in the CLI
+    pass
+
 
 def cleanup():
+    #TODO make this safe, remove only the test items, don't remove ALL objects (similar to DBFS and notebook test)
     cluster_api = ClusterApi(api_client)
-    cluster_list = cluster_api.list_clusters()["clusters"]
-
-    for cluster in cluster_list:
-        cluster_api.delete_cluster(cluster["cluster_id"])
+    cluster_list = cluster_api.list_clusters()
+    if "clusters" in cluster_list:
+        for cluster in cluster_list["clusters"]:
+            if cluster["cluster_name"] in ["no pool std cluster 1","no pool std cluster 2"]:
+                cluster_api.delete_cluster(cluster["cluster_id"])
 
     pool_api = InstancePoolsApi(api_client)
     pool_list = pool_api.list_instance_pools()
@@ -134,15 +144,25 @@ def cleanup():
             service.delete_policy(policy["policy_id"])
 
     dbfs_api = DbfsApi(api_client)
-    dbfs_api.delete(DbfsPath("dbfs:/example_notebook.py"), False)
+    try:
+        file_exists = dbfs_api.get_status(DbfsPath("dbfs:/example_notebook.py"))
+        dbfs_api.delete(DbfsPath("dbfs:/example_notebook.py"), False)
+    except:
+        pass
 
     workspace_api = WorkspaceApi(api_client)
-    workspace_api.delete("/Shared/example_notebook", False)
+    try:
+        notebook_exists = workspace_api.list_objects("/Shared/example_notebook")
+        workspace_api.delete("/Shared/example_notebook", False)
+    except:
+        pass
 
-#create_clusters()
-#create_pools()
-#create_policies()
-#upload_dbfs_file()
-#upload_notebook()
+
 cleanup()
+
+create_clusters()
+create_pools()
+create_policies()
+upload_dbfs_file()
+upload_notebook()
 
