@@ -1,5 +1,6 @@
 import json
 import os
+from dotenv import load_dotenv
 
 from databricks_cli.configure.provider import get_config_for_profile
 from databricks_cli.instance_pools.api import InstancePoolsApi
@@ -11,8 +12,14 @@ from databricks_cli.sdk import ApiClient
 
 # setup
 path = os.path.dirname(__file__)
-profile = 'dr_source'
-config = get_config_for_profile(profile)
+print(path)
+dotenv_path = os.path.join(path,'../.env')
+print(dotenv_path)
+load_dotenv(dotenv_path=dotenv_path)
+
+src_profile = os.environ.get("AZURE_SOURCE_WORKSPACE")
+print(src_profile)
+config = get_config_for_profile(src_profile)
 
 # api setup
 api_client = ApiClient(host=config.host, token=config.token)
