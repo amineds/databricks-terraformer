@@ -13,17 +13,46 @@ from databricks_terraformer.cli import cli
 
 # TODO explain this in README.md
 
-
-# execution:
-### DONE - optional - cleanup git
-### DONE - optional - cleanup source workspace
-# DONE - cli_create_source_workspace (remove cleanup?)
-# DONE - export_workspace - with source
-### optional - cleanup target workspace
-# DONE - import_target_workspace (remove cleanup?)
-# export_workspace - with target and dry-run
-
 from tests import cleanup_workspace, cleanup_git
+
+db_objects = {'instance-pools':
+               {'args': None,
+                'export_object_count': 2,
+                'import_object_count': 2,
+                'export_pattern': 'Writing instance_pools to path',
+                'import_pattern': '\+ resource "databricks_instance_pool"'
+                },
+           'cluster-policies':
+               {'args': None,
+                'export_object_count': 3,
+                'import_object_count': 3,
+                'export_pattern': 'Writing cluster_policies to path',
+                'import_pattern': '\+ resource "databricks_cluster_policy"'
+                },
+           # 'jobs':
+           #     {'args': None,
+           #      'export_object_count': 1,
+           #      'import_object_count': 1,
+           #      'export_pattern': 'Writing jobs to path',
+           #      'import_pattern': '\+ resource "databricks_job"'
+           #      },
+           'notebooks':
+               {'args': ["--notebook-path", "/Shared"],
+                # notebooks count double, the hcl and the file
+                'export_object_count': 6,
+                'import_object_count': 3,
+                'export_pattern': 'Writing notebooks to path',
+                'import_pattern': '\+ resource "databricks_notebook"'
+                },
+           'dbfs':
+               {'args': ["--dbfs-path", "/databricks/init"],
+                # DBFS count double, the hcl and the file
+                'export_object_count': 16,
+                'import_object_count': 8,
+                'export_pattern': 'Writing dbfs to path',
+                'import_pattern': '\+ resource "databricks_dbfs_file"'
+                },
+           }
 
 
 def test_cleanup(src_cluster_api: ClusterApi, tgt_cluster_api: ClusterApi, src_policy_service: PolicyService,
@@ -106,7 +135,8 @@ def test_src_notebooks(src_workspace_api: WorkspaceApi):
     assert src_workspace_api.list_objects("/Shared/example_notebook") is not None
 
 
-def test_src_export(db_objects, cli_runner, env):
+def test_src_export(cli_runner, env):
+    global db_objects
     for run, params in db_objects.items():
         print(run)
         print(params)
@@ -126,7 +156,8 @@ def test_src_export(db_objects, cli_runner, env):
             f"export {run} found {len(re.findall(params['export_pattern'], result.stdout))} objects expected {params['export_object_count']}"
 
 
-def test_tgt_import(db_objects, cli_runner, env):
+def test_tgt_import(cli_runner, env):
+    global db_objects
     result = cli_runner.invoke(cli,
                                args=['import', '-g', env["git_repo"], '--profile', env["target"], "--revision",
                                      env["revision"],
@@ -144,7 +175,8 @@ def test_tgt_import(db_objects, cli_runner, env):
             f"import {run} found {len(re.findall(params['import_pattern'], result.stdout))} objects expected {params['import_object_count']}"
 
 
-def test_tgt_export_dryrun(db_objects, cli_runner, env):
+def test_tgt_export_dryrun(cli_runner, env):
+    global db_objects
     for run, params in db_objects.items():
         print(run)
         print(params)
