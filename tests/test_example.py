@@ -16,43 +16,43 @@ from databricks_terraformer.cli import cli
 from tests import cleanup_workspace, cleanup_git
 
 db_objects = {'instance-pools':
-               {'args': None,
-                'export_object_count': 2,
-                'import_object_count': 2,
-                'export_pattern': 'Writing instance_pools to path',
-                'import_pattern': '\+ resource "databricks_instance_pool"'
-                },
-           'cluster-policies':
-               {'args': None,
-                'export_object_count': 3,
-                'import_object_count': 3,
-                'export_pattern': 'Writing cluster_policies to path',
-                'import_pattern': '\+ resource "databricks_cluster_policy"'
-                },
-           # 'jobs':
-           #     {'args': None,
-           #      'export_object_count': 1,
-           #      'import_object_count': 1,
-           #      'export_pattern': 'Writing jobs to path',
-           #      'import_pattern': '\+ resource "databricks_job"'
-           #      },
-           'notebooks':
-               {'args': ["--notebook-path", "/Shared"],
-                # notebooks count double, the hcl and the file
-                'export_object_count': 6,
-                'import_object_count': 3,
-                'export_pattern': 'Writing notebooks to path',
-                'import_pattern': '\+ resource "databricks_notebook"'
-                },
-           'dbfs':
-               {'args': ["--dbfs-path", "/databricks/init"],
-                # DBFS count double, the hcl and the file
-                'export_object_count': 16,
-                'import_object_count': 8,
-                'export_pattern': 'Writing dbfs to path',
-                'import_pattern': '\+ resource "databricks_dbfs_file"'
-                },
-           }
+                  {'args': None,
+                   'export_object_count': 2,
+                   'import_object_count': 2,
+                   'export_pattern': 'Writing instance_pools to path',
+                   'import_pattern': r'\+ resource "databricks_instance_pool"'
+                   },
+              'cluster-policies':
+                  {'args': None,
+                   'export_object_count': 3,
+                   'import_object_count': 3,
+                   'export_pattern': 'Writing cluster_policies to path',
+                   'import_pattern': r'\+ resource "databricks_cluster_policy"'
+                   },
+              # 'jobs':
+              #     {'args': None,
+              #      'export_object_count': 1,
+              #      'import_object_count': 1,
+              #      'export_pattern': 'Writing jobs to path',
+              #      'import_pattern': r'\+ resource "databricks_job"'
+              #      },
+              'notebooks':
+                  {'args': ["--notebook-path", "/Shared"],
+                   # notebooks count double, the hcl and the file
+                   'export_object_count': 6,
+                   'import_object_count': 3,
+                   'export_pattern': 'Writing notebooks to path',
+                   'import_pattern': r'\+ resource "databricks_notebook"'
+                   },
+              'dbfs':
+                  {'args': ["--dbfs-path", "/example_notebook.py"],
+                   # DBFS count double, the hcl and the file
+                   'export_object_count': 2,
+                   'import_object_count': 1,
+                   'export_pattern': 'Writing dbfs to path',
+                   'import_pattern': r'\+ resource "databricks_dbfs_file"'
+                   },
+              }
 
 
 def test_cleanup(src_cluster_api: ClusterApi, tgt_cluster_api: ClusterApi, src_policy_service: PolicyService,
@@ -170,9 +170,18 @@ def test_tgt_import(cli_runner, env):
     assert result.exit_code == 0
 
     for run, params in db_objects.items():
-        assert result.exit_code == 0
         assert len(re.findall(params['import_pattern'], result.stdout)) == params['import_object_count'], \
             f"import {run} found {len(re.findall(params['import_pattern'], result.stdout))} objects expected {params['import_object_count']}"
+
+
+def test_tgt_objects_exist(tgt_policy_service: PolicyService, tgt_pool_api: InstancePoolsApi,
+                           src_dbfs_api: DbfsApi, tgt_dbfs_api: DbfsApi, tgt_workspace_api:WorkspaceApi, env):
+
+    assert len(tgt_policy_service.list_policies()["policies"]) == db_objects['cluster-policies']['import_object_count']
+    assert len(tgt_pool_api.list_instance_pools()["instance_pools"]) == db_objects['instance-pools']['import_object_count']
+    assert len(tgt_workspace_api.list_objects("/Shared")) == db_objects['notebooks']['import_object_count']
+    assert len(tgt_dbfs_api.list_files(DbfsPath("dbfs:/example_notebook.py"))) == db_objects['dbfs']['import_object_count']
+
 
 
 def test_tgt_export_dryrun(cli_runner, env):
