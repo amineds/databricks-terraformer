@@ -19,7 +19,9 @@ setuptools.setup(
           'click>=6.7',
           'click-log==0.3.2',
           'databricks-cli==0.11.0',
-          'gitpython'
+          'gitpython',
+          'streamz==0.5.5',
+          # 'tenancity'
       ],
     package_data={
         'databricks_terraformer': ['hcl/json2hcl.so', 'utils/changelog.md.j2', 'hcl/hcl.tf.j2'],
