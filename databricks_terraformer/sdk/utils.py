@@ -1,23 +1,7 @@
 import abc
+import functools
 import re
 from typing import Text, Dict, Any
-
-
-class Annotation:
-
-    def __init__(self, key, annotation=None):
-        self.annotation = annotation
-        self.key = key
-
-    @classmethod
-    def from_string(cls, val: str) -> 'Annotation':
-        parts = val.split(":")
-        if len(parts) == 1:
-            return cls(parts[0])
-        elif len(parts) == 2:
-            return cls(parts[1], annotation=parts[0])
-        else:
-            raise ValueError(f"key: {val} failed to have either have a valid or no annotation or too many semicolons")
 
 
 class DictDotPathVisitor(abc.ABC):
@@ -105,13 +89,21 @@ def walk_via_dot(old_key_dot: Text, d: Dict[Text, Any],
                 else:
                     raise IndexError(f"cannot look for {get_array_value(key)} in list {d}")
                 return
-            # print(d)
             if key not in d.keys() and key not in [key.split(":")[-1] for key in d.keys()]:
                 raise KeyError(f"key: {key} in {old_key_dot} not found in {d}")
             d = get_value_annotated(key, d)
 
     for visitor in visitors:
         visitor.visit(d, last_key)
+
+
+def normalize(func):
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        output = func(*args, **kwargs)
+        return normalize_identifier(output)
+
+    return wrapper
 
 
 def normalize_identifier(identifier):

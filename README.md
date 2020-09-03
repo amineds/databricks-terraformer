@@ -67,6 +67,7 @@ make; GIT_PYTHON_TRACE=full databricks-terraformer import \
     --artifact-dir tmp \
     --apply \
     --backend-file tmp/backend.tf
+GIT_PYTHON_TRACE=full databricks-terraformer -v DEBUG export --profile field-eng --git-ssh-url git@github.com:stikkireddy/export-example.git -c /Users/Sri.Tikkireddy/PycharmProjects/databricks-terraformer/databricks_terraformer/sdk/test.yaml --dry-run --dask-mode
 ```
 
 ## Commands to do local development

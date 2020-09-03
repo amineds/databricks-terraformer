@@ -1,16 +1,15 @@
 import io
 from base64 import b64decode
 from pathlib import Path
-from typing import Generator, List, Dict, Optional
+from typing import Generator, List, Dict, Optional, Any
 
 from databricks_cli.dbfs.api import FileInfo, BUFFER_SIZE_BYTES
 from databricks_cli.sdk import DbfsService, ApiClient
 from databricks_cli.utils import error_and_quit
 
-from databricks_terraformer.hcl import EXPR_PREFIX
-from databricks_terraformer.sdk.export import DownloaderAPIGenerator
+from databricks_terraformer.sdk.hcl import EXPR_PREFIX
+from databricks_terraformer.sdk.pipeline import DownloaderAPIGenerator
 from databricks_terraformer.sdk.message import APIData, Artifact
-from databricks_terraformer.sdk.utils import normalize_identifier
 
 
 class DbfsFile(Artifact):
@@ -47,6 +46,7 @@ class DbfsFileHCLGenerator(DownloaderAPIGenerator):
                          custom_map_vars=custom_map_vars,
                          custom_dynamic_vars=custom_dynamic_vars)
         self.__dbfs_path = dbfs_path
+        self.__service = DbfsService(self.api_client)
 
     @property
     def resource_name(self) -> str:
@@ -78,23 +78,28 @@ class DbfsFileHCLGenerator(DownloaderAPIGenerator):
             else:
                 yield file
 
+    def construct_artifacts(self, data: Dict[str, Any]) -> List[Artifact]:
+        return [DbfsFile(remote_path=data["path"],
+                         local_path=self.get_local_download_path(self.get_identifier(data)),
+                         service=self.__service)]
+
+    def _define_identifier(self, data: Dict[str, Any]) -> str:
+        return f"{self.resource_name}-{data['path']}"
+
+    def get_raw_id(self, data: Dict[str, Any]) -> str:
+        return data["path"]
+
+    def make_hcl_dict(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "source": f'pathexpand("{self.get_identifier(data)}")',
+            "content_b64_md5": f'md5(filebase64(pathexpand("{self.get_identifier(data)}")))',
+            "path": data["path"],
+            "overwrite": True,
+            "mkdirs": True,
+            "validate_remote_file": True,
+        }
+
     async def _generate(self) -> Generator[APIData, None, None]:
         service = DbfsService(self.api_client)
         for file in DbfsFileHCLGenerator.__get_dbfs_file_data_recrusive(service, self.__dbfs_path):
-            file_path = file["path"]
-            if self._match_patterns(file_path) is False:
-                continue
-            identifier = normalize_identifier(f"databricks_dbfs_file-{file_path}")
-            json = {
-                "source": f'pathexpand("{identifier}")',
-                "content_b64_md5": f'md5(filebase64(pathexpand("{identifier}")))',
-                "path": file_path,
-                "overwrite": True,
-                "mkdirs": True,
-                "validate_remote_file": True,
-            }
-            required_artifact = DbfsFile(remote_path=file_path,
-                                         local_path=self.get_local_download_path(identifier),
-                                         service=service)
-            yield APIData(file_path, self.api_client.url,
-                          identifier, json, self.get_local_hcl_path(identifier), artifacts=[required_artifact])
+            yield file

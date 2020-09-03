@@ -28,7 +28,6 @@ class TestGitHandler:
 
     @patch('pathlib.Path.absolute', return_value=True)
     @patch('git.Repo.clone_from', return_value=MagicMock())
-    # @patch('datetime.datetime.strftime', return_value="20200101")
     def test_commit(self, git_mock, path_mock):
         gh = GitHandler(git_url="fake-git-url", base_path=Path("/tmp/test"))
         datetime.datetime = MockNow

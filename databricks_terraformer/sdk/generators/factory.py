@@ -4,7 +4,7 @@ import pkgutil
 import re
 
 from databricks_terraformer.sdk import generators
-from databricks_terraformer.sdk.export import APIGenerator
+from databricks_terraformer.sdk.pipeline import APIGenerator
 
 
 class GeneratorFactory:

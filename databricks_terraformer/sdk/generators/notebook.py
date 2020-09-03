@@ -1,15 +1,14 @@
 from base64 import b64decode
 from pathlib import Path
-from typing import List, Generator, Dict, Optional
+from typing import List, Generator, Dict, Optional, Any
 
 from databricks_cli.sdk import WorkspaceService, ApiClient
 from databricks_cli.workspace.api import WorkspaceFileInfo
 
 from databricks_terraformer import log
-from databricks_terraformer.hcl import EXPR_PREFIX
-from databricks_terraformer.sdk.export import DownloaderAPIGenerator
+from databricks_terraformer.sdk.hcl import EXPR_PREFIX
+from databricks_terraformer.sdk.pipeline import DownloaderAPIGenerator
 from databricks_terraformer.sdk.message import Artifact, APIData
-from databricks_terraformer.sdk.utils import normalize_identifier
 
 
 class NotebookArtifact(Artifact):
@@ -31,6 +30,7 @@ class NotebookHCLGenerator(DownloaderAPIGenerator):
                          custom_map_vars=custom_map_vars,
                          custom_dynamic_vars=custom_dynamic_vars)
         self.__notebook_path = notebook_path
+        self.__service = WorkspaceService(self.api_client)
 
     @property
     def _annotation_dot_paths(self) -> Dict[str, List[str]]:
@@ -53,33 +53,39 @@ class NotebookHCLGenerator(DownloaderAPIGenerator):
     @staticmethod
     def _get_notebooks_recursive(service: WorkspaceService, path: str):
         resp = service.list(path)
-        print(f"Fetched all files & folders from path: {path}")
+        log.info(f"Fetched all files & folders from path: {path}")
         if "objects" not in resp:
             return []
         objects = resp["objects"]
         for obj in objects:
             workspace_obj = WorkspaceFileInfo.from_json(obj)
             if workspace_obj.is_notebook is True:
-                yield workspace_obj
+                yield workspace_obj.__dict__
             if workspace_obj.is_dir is True:
                 yield from NotebookHCLGenerator._get_notebooks_recursive(service, workspace_obj.path)
 
-    async def _generate(self) -> Generator[APIData, None, None]:
-        service = WorkspaceService(self.api_client)
-        for file in NotebookHCLGenerator._get_notebooks_recursive(service, self.__notebook_path):
-            if self._match_patterns(file.path) is False:
-                continue
-            identifier = normalize_identifier(f"{self.resource_name}-{file.path}")
-            json = {
-                "content": f'filebase64("{identifier}")',
-                "path": file.path,
+    def construct_artifacts(self, data: Dict[str, Any]) -> List[Artifact]:
+        return [NotebookArtifact(remote_path=data['path'],
+                                 local_path=self.get_local_download_path(self.get_identifier(data)),
+                                 service=self.__service)]
+
+    def _define_identifier(self, data: Dict[str, Any]) -> str:
+        return f"{self.resource_name}-{data['path']}"
+
+    def get_raw_id(self, data: Dict[str, Any]) -> str:
+        return data['path']
+
+    def make_hcl_dict(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+                "content": f'filebase64("{self.get_identifier(data)}")',
+                "path": data['path'],
                 "overwrite": True,
                 "mkdirs": True,
-                "language": file.language,
+                "language": data['language'],
                 "format": "SOURCE",
             }
-            required_artifact = NotebookArtifact(remote_path=file.path,
-                                                 local_path=self.get_local_download_path(identifier),
-                                                 service=service)
-            yield APIData(file.path, self.api_client.url,
-                          identifier, json, self.get_local_hcl_path(identifier), artifacts=[required_artifact])
+
+    async def _generate(self) -> Generator[APIData, None, None]:
+        service = WorkspaceService(self.api_client)
+        for item in NotebookHCLGenerator._get_notebooks_recursive(service, self.__notebook_path):
+            yield item

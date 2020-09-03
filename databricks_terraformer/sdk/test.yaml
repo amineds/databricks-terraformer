@@ -1,0 +1,19 @@
+#commit_msg_template:
+name: test
+objects:
+
+  notebook:
+    notebook_path: "/Users/sri.tikkireddy@databricks.com/"
+    patterns:
+      - "*"
+    custom_map_vars:
+      path: "/Users/%{DATA:variable}/%{GREEDYDATA}"
+  cluster_policy:
+    patterns:
+      - "*"
+#    custom_map_vars:
+  #      - "dat"
+  #    custom_dynamic_vars:
+  #      - "format"
+  dbfs_file:
+    dbfs_path: "dbfs:/databricks/init_scripts"

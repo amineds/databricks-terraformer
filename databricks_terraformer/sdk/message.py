@@ -5,7 +5,8 @@ import traceback
 from pathlib import Path
 from typing import List, Optional, Any
 
-from databricks_terraformer.hcl.json_to_hcl import create_variable_from_dict, create_resource_from_dict, create_hcl_file
+from databricks_terraformer import log
+from databricks_terraformer.sdk.hcl.json_to_hcl import create_variable_from_dict, create_resource_from_dict, create_hcl_file
 
 
 class Artifact(abc.ABC):
@@ -91,8 +92,8 @@ class ErrorMixin:
 
             if len(inp.errors) > 0:
                 # This is if the function gets called and an error already exists
-                print("Found error when processing function: " + func.__name__)
-                print("Error List: " + str(inp.errors))
+                log.info("Found error when processing function: " + func.__name__)
+                log.info("Error List: " + str(inp.errors))
                 return inp
             try:
                 resp = func(inp)

@@ -4,7 +4,7 @@ from typing import List, Text, Dict, Optional
 
 from pygrok import Grok
 
-from databricks_terraformer.hcl import EXPR_PREFIX, RAW_STRING_PREFIX
+from databricks_terraformer.sdk.hcl import EXPR_PREFIX, RAW_STRING_PREFIX
 from databricks_terraformer.sdk.message import HCLConvertData
 from databricks_terraformer.sdk.utils import RekeyVisitor, walk_via_dot, normalize_identifier, \
     SetValueVisitor, GetValueVisitor
@@ -44,7 +44,6 @@ class BasicAnnotationProcessor(Processor):
             walk_via_dot(key, d, visitor)
 
     def _process(self, terraform_model: HCLConvertData):
-        # print(terraform_model)
         this_dict = copy.deepcopy(terraform_model.latest_version)
         self._annotate(this_dict)
         terraform_model.modify_json(this_dict)

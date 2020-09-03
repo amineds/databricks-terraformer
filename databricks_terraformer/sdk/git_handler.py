@@ -27,38 +27,38 @@ class GitHandler:
 
     def _delete_directory(self):
         if self.delete_directory is not None and self.delete_directory.exists():
-            print(self.delete_directory.absolute())
+            log.info(self.delete_directory.absolute())
             shutil.rmtree(self.delete_directory.absolute())
 
     # TODO: Uncomment and test when we need capabilities to report on differences
-    # def get_changes(self, directory):
-    #     # TODO: maybe do this but lets understand what the customer wants to see in regards to report.
-    #     # TODO: Is the log enough on the CI/CD tool
-    #     diff = self.repo.git.diff('HEAD', '--', directory, name_status=True)
-    #     if len(diff) is 0:
-    #         log.info("No files were changed and no diff was found.")
-    #     else:
-    #         category_changes = {}
-    #         for line in sorted(diff.split("\n")):
-    #             # get the relative path of the file relative to the handler directory
-    #             rel_path = line.split('\t')[1].replace(directory + "/", "")
-    #             parts = line.split("/")
-    #             if len(parts) in [0, 1, 2]:
-    #                 continue
-    #             category = parts[1]
-    #             if category not in category_changes:
-    #                 category_changes[category] = {
-    #                     "added": [],
-    #                     "modified": [],
-    #                     "deleted": []
-    #                 }
-    #             if line.startswith("D"):
-    #                 category_changes[category]["deleted"].append(rel_path)
-    #             if line.startswith("A"):
-    #                 category_changes[category]["added"].append(rel_path)
-    #             if line.startswith("M"):
-    #                 category_changes[category]["modified"].append(rel_path)
-    #         return category_changes
+    def get_changes(self, directory):
+        # TODO: maybe do this but lets understand what the customer wants to see in regards to report.
+        # TODO: Is the log enough on the CI/CD tool
+        diff = self.repo.git.diff('HEAD', '--', directory, name_status=True)
+        if len(diff) is 0:
+            log.info("No files were changed and no diff was found.")
+        else:
+            category_changes = {}
+            for line in sorted(diff.split("\n")):
+                # get the relative path of the file relative to the handler directory
+                rel_path = line.split('\t')[1].replace(directory + "/", "")
+                parts = line.split("/")
+                if len(parts) in [0, 1, 2]:
+                    continue
+                category = parts[1]
+                if category not in category_changes:
+                    category_changes[category] = {
+                        "added": [],
+                        "modified": [],
+                        "deleted": []
+                    }
+                if line.startswith("D"):
+                    category_changes[category]["deleted"].append(rel_path)
+                if line.startswith("A"):
+                    category_changes[category]["added"].append(rel_path)
+                if line.startswith("M"):
+                    category_changes[category]["modified"].append(rel_path)
+            return category_changes
 
     def stage_changes(self):
         self.repo.git.add(A=True)

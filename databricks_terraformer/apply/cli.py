@@ -3,8 +3,8 @@ from databricks_cli.configure.config import debug_option, profile_option
 from databricks_cli.utils import eat_exceptions
 
 from databricks_terraformer import CONTEXT_SETTINGS
-from databricks_terraformer.config import git_url_option, ssh_key_option, inject_profile_as_env, absolute_path_callback
-from databricks_terraformer.utils.terraform import GitTFStage_V2
+from databricks_terraformer.cmds.config import git_url_option, ssh_key_option, inject_profile_as_env, absolute_path_callback
+from databricks_terraformer.misc.utils import GitTFStage_V2
 
 
 SUPPORT_IMPORTS = ['cluster_policies', 'dbfs', 'notebooks', 'instance_pools']
