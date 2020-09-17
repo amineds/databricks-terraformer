@@ -6,7 +6,8 @@ from pathlib import Path
 from typing import List, Optional, Any
 
 from databricks_terraformer import log
-from databricks_terraformer.sdk.hcl.json_to_hcl import create_variable_from_dict, create_resource_from_dict, create_hcl_file
+from databricks_terraformer.sdk.hcl.json_to_hcl import TerraformJsonBuilder, \
+    TerraformDictBuilder
 
 
 class Artifact(abc.ABC):
@@ -67,8 +68,20 @@ class Variable:
     def __repr__(self):
         return json.dumps(self.__dict__)
 
+    def to_dict(self):
+        if self.default is None:
+            return {}
+        else:
+            return {
+                "default": self.default
+            }
+
     def to_hcl(self, debug: bool):
-        return create_variable_from_dict(self.variable_name, {"default": self.default}, debug)
+        tdb = TerraformDictBuilder(). \
+            add_optional_if(lambda: self.default is not None, "default", lambda: self.default)
+        return TerraformJsonBuilder(). \
+            add_variable(self.variable_name, tdb.to_dict()). \
+            to_json()
 
 
 class ErrorMixin:
@@ -120,6 +133,10 @@ class HCLConvertData(ErrorMixin):
         self.__resource_variables = []
 
     @property
+    def raw_id(self):
+        return self.__raw_api_data.raw_identifier
+
+    @property
     def local_save_path(self):
         return self.__raw_api_data.local_save_path
 
@@ -165,10 +182,15 @@ class HCLConvertData(ErrorMixin):
         self.__resource_variables.append(Variable(variable_name, variable_default_value))
 
     def to_hcl(self, debug: bool):
-        variable_hcls = "\n".join([r_var.to_hcl(debug) for r_var in self.resource_variables])
-        resource_hcl = create_resource_from_dict(self.resource_name, self.hcl_resource_identifier,
-                                                 self.latest_version,
-                                                 debug)
-        hcl_code = "\n".join([variable_hcls, resource_hcl])
-        return create_hcl_file(self.hcl_resource_identifier, self.__raw_api_data.workspace_url, self.latest_version,
-                               hcl_code)
+        tjb = TerraformJsonBuilder()
+        for r_var in self.resource_variables:
+            tjb.add_variable(r_var.variable_name, r_var.to_dict())
+        tjb.add_resource(self.resource_name, self.hcl_resource_identifier, self.latest_version)
+        return tjb.to_json()
+        # variable_hcls = "\n".join([r_var.to_hcl(debug) for r_var in self.resource_variables])
+        # resource_hcl = create_resource_from_dict(self.resource_name, self.hcl_resource_identifier,
+        #                                          self.latest_version,
+        #                                          debug)
+        # hcl_code = "\n".join([variable_hcls, resource_hcl])
+        # return create_hcl_file(self.hcl_resource_identifier, self.__raw_api_data.workspace_url, self.latest_version,
+        #                        hcl_code)

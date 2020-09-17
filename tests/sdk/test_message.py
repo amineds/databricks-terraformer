@@ -49,13 +49,13 @@ class TestHCLConvertData:
         assert hcl_convert_data_with_no_processors.local_save_path == sample_api_data_with_artifacts.local_save_path
 
     def test_resource_name(self, hcl_convert_data_with_no_processors):
-        assert hcl_convert_data_with_no_processors.resource_name == resource_name
+        assert hcl_convert_data_with_no_processors.folder_name == resource_name
 
     def test_artifacts(self, hcl_convert_data_with_no_processors, sample_api_data_with_artifacts):
         assert hcl_convert_data_with_no_processors.artifacts == sample_api_data_with_artifacts.artifacts
 
     def test_processors(self, hcl_convert_data_with_no_processors):
-        assert hcl_convert_data_with_no_processors.processors == []
+        assert hcl_convert_data_with_no_processors.map_processors == []
 
     def test_hcl_resource_identifier(self, hcl_convert_data_with_no_processors, sample_api_data_with_artifacts):
         assert hcl_convert_data_with_no_processors.hcl_resource_identifier == sample_api_data_with_artifacts.hcl_resource_identifier

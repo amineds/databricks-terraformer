@@ -11,9 +11,8 @@ objects:
   cluster_policy:
     patterns:
       - "*"
-#    custom_map_vars:
-  #      - "dat"
-  #    custom_dynamic_vars:
-  #      - "format"
+  scim_users:
+    patterns:
+      - "*"
   dbfs_file:
     dbfs_path: "dbfs:/databricks/init_scripts"

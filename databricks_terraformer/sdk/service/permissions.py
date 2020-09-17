@@ -1,6 +1,3 @@
-from databricks_cli.sdk import ApiClient
-
-
 class PermissionService(object):
     def __init__(self, client):
         self.client = client

@@ -14,7 +14,7 @@ from databricks_terraformer.sdk.sync.export import ExportCoordinator
 @click.command(context_settings=CONTEXT_SETTINGS, help="Export Notebook files.")
 @debug_option
 @profile_option
-@eat_exceptions
+# @eat_exceptions
 @provide_api_client
 @git_url_option
 @config_file_option

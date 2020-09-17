@@ -15,7 +15,7 @@ class MockApiClient():
 class MockAPIGenerator(APIGenerator):
 
     @property
-    def resource_name(self) -> str:
+    def folder_name(self) -> str:
         return "mock_resource"
 
     @property

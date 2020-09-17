@@ -1,102 +1,128 @@
+import abc
+import collections
+import copy
 import json
-import os
-from ctypes import *
-from typing import Text, Any, Dict
-
-from jinja2 import Environment, FileSystemLoader
-
-so_path = os.path.join(os.path.dirname(__file__), 'json2hcl.so')
-lib = cdll.LoadLibrary(so_path)
+from typing import Any, Dict, Callable
 
 
-class GoString(Structure):
-    _fields_ = [("p", c_char_p), ("n", c_longlong)]
+class TerraformValueWrapper(abc.ABC):
+
+    @staticmethod
+    @abc.abstractmethod
+    def make(field: str, input_dictionary: Dict[str, Any]):
+        pass
 
 
-# Python representation of the C struct for CreateResourceHCLResponse
-class CreateHCLResponse(Structure):
-    _fields_ = [("hcl", c_char_p), ("error", c_char_p)]
+class Block(TerraformValueWrapper):
+
+    @staticmethod
+    def make(field: str, input_dictionary: Dict[str, Any]):
+        value = input_dictionary[field]
+        if isinstance(value, list):
+            return
+        elif isinstance(value, dict):
+            input_dictionary[field] = [value]
+        else:
+            raise ValueError("value needs to be either a list or a dictionary to be a block")
 
 
-lib.CreateHCLFromJson.argtypes = [GoString, GoString, GoString, GoString, c_ubyte]
-lib.CreateHCLFromJson.restype = CreateHCLResponse
+class Expression(TerraformValueWrapper):
+
+    @staticmethod
+    def make(field: str, input_dictionary: Dict[str, Any]):
+        value = input_dictionary[field]
+        if isinstance(value, str):
+            input_dictionary[field] = "${" + value + "}"
+        else:
+            raise ValueError("value needs to be either a list or a dictionary to be a block")
 
 
-def _create_hcl_from_json(object_type: Text, object_name: Text, object_identifier: Text,
-                          object_data_dictionary: Dict[Text, Any], debug: bool) -> Text:
-    """
-    :param object_type: Object type can be either "resource", "data", variable, etc
-    :param object_name: This is the resource/data source type. Make this empty string when you need a variable/output
-    :param object_identifier: This is identifier of the variable, resource, data, etc. object
-    :param object_data_dictionary: This is the dictionary content of the resource
-    :param debug: Boolean flag that indicates whether the debug statements in go code should be printed to console
-    :return:
-    """
-    b_object_type = object_type.encode("UTF-8")
-    b_object_name = object_name.encode("UTF-8")
-    b_object_identifier = object_identifier.encode("UTF-8")
-    # Load object as dictionary
-    json_str = json.dumps(object_data_dictionary)
-    b_json_str = json_str.encode("UTF-8")
+class TerraformDictBuilder:
 
-    go_object_type = GoString(b_object_type, len(b_object_type))
-    go_object_name = GoString(b_object_name, len(b_object_name))
-    go_object_identifier = GoString(b_object_identifier, len(b_object_identifier))
-    go_json_str = GoString(b_json_str, len(b_json_str))
+    def __init__(self):
+        self.__tf_dict = {}
 
-    debug_option = 1 if debug else 0
-    output = lib.CreateHCLFromJson(go_object_type, go_object_name, go_object_identifier, go_json_str,
-                                   c_ubyte(debug_option))
-    if len(output.error) > 0:
-        raise ValueError(output.error.decode("UTF-8"))
-    else:
-        return output.hcl.decode("UTF-8")
+    def add_optional_if(self, condition_func: Callable[[], bool], field: str, value_func: Callable[[], Any],
+                     *convertors: TerraformValueWrapper, tf_field_name=None):
+        if condition_func():
+            self.add_optional(field, value_func, *convertors, tf_field_name=tf_field_name)
+        return self
 
+    # TODO: CloudFlag Convertor add that
+    def add_optional(self, field: str, value_func: Callable[[], Any],
+                     *convertors: TerraformValueWrapper, tf_field_name=None):
+        try:
+            value = value_func()
+            self.__add_field(field, value, tf_field_name=tf_field_name, *convertors)
+        except KeyError as e:
+            print("permitting optional key error: " + str(e))
+        return self
 
-def create_resource_from_dict(resource_name: Text, resource_identifier: Text,
-                              resource_dict: Dict[Text, Any], debug: bool):
-    return _create_hcl_from_json("resource", resource_name, resource_identifier, resource_dict, debug)
+    def add_required(self, field: str, value_func: Callable[[], Any], *convertors: TerraformValueWrapper,
+                     tf_field_name=None):
+        value = value_func()
+        self.__add_field(field, value, tf_field_name=tf_field_name, *convertors)
+        return self
 
+    def add_cloud_optional_block(self, field, value_func: Callable[[], Any], cloud_name):
+        dynamic_block = {
+            field: {
+                "for_each": "${var.CLOUD == \"" + cloud_name + "\" ? [1] : []}",
+            }
+        }
+        try:
+            val = value_func()
+            if not isinstance(val, dict):
+                raise ValueError(f"expected value in field {field} to be a dictionary but got {val}")
+            dynamic_block[field]["content"] = val
+            self.__tf_dict.setdefault("dynamic", [])
+            self.__tf_dict["dynamic"].append(dynamic_block)
+        except KeyError as e:
+            print("permitting optional key error: " + str(e))
+        return self
 
-def create_variable_from_dict(variable_identifier: Text,
-                              variable_dict: Dict[Text, Any], debug: bool):
-    return _create_hcl_from_json("variable", "", variable_identifier, variable_dict, debug)
+    def __add_field(self, field: str, value: Any, *convertors: TerraformValueWrapper,
+                    tf_field_name=None):
+        this_field_name = tf_field_name or field
+        self.__tf_dict[this_field_name] = value
+        for convertor in convertors:
+            convertor.make(this_field_name, self.__tf_dict)
 
+    @staticmethod
+    def make_cloud_specific(data: Dict[str, Any], cloud_env):
+        data["count"] = "${var.CLOUD == \"" + cloud_env + "\" ? 1 : 0}"
 
-class ValidateHCLResponse(Structure):
-    _fields_ = [("errors", c_char_p)]
-
-
-lib.ValidateHCL.argtypes = [GoString, c_ubyte]
-lib.ValidateHCL.restype = ValidateHCLResponse
-
-
-def validate_hcl(hcl_string: Text, debug: bool = False) -> Text:
-    b_hcl_string = hcl_string.encode("utf-8")
-    go_hcl_string = GoString(b_hcl_string, len(b_hcl_string))
-    debug_option = 1 if debug else 0
-    output = lib.ValidateHCL(go_hcl_string, c_ubyte(debug_option))
-    return output.errors.decode("UTF-8")
-
-def _comment(data):
-    arr = []
-    for line in data.split("\n"):
-        arr.append(f"# {line}")
-    return "\n".join(arr)
+    def to_dict(self):
+        return self.__tf_dict
 
 
-def create_hcl_file(identity: Text,
-                    workspace_url: Text,
-                    raw_dict: Dict[Text, Any],
-                    hcl_code: Text):
-    cur_dir = os.path.dirname(os.path.abspath(__file__))
+class TerraformJsonBuilder:
 
-    hcl_env = Environment(loader=FileSystemLoader(cur_dir),
-                          trim_blocks=True)
+    def __init__(self):
+        self.__variables = collections.OrderedDict()
+        self.__resources = collections.OrderedDict()
+        self.__outputs = collections.OrderedDict()
 
-    return hcl_env.get_template('hcl.tf.j2').render(
-        identity=identity,
-        workspace_url=workspace_url,
-        raw_json=_comment(json.dumps(raw_dict, sort_keys=True, indent=4)),
-        hcl_code=hcl_code,
-    )
+    def add_variable(self, variable_name: str, variable: Dict[str, Any]):
+        if variable_name in self.__variables:
+            raise ValueError("variable already exists")
+        self.__variables[variable_name] = variable
+        return self
+
+    def add_resource(self, resource_type: str, resource_id: str, resource_content: Dict[str, Any], cloud_flag=None):
+        if resource_type not in self.__resources:
+            self.__resources[resource_type] = {}
+        if resource_id in self.__resources[resource_type]:
+            raise ValueError("cannot repeat resource identifier it must be unique across the terraform deployment")
+        this_resource_content = copy.deepcopy(resource_content)
+        if cloud_flag is not None and isinstance(cloud_flag, str):
+            this_resource_content["count"] = "${var.CLOUD == \"" + cloud_flag + "\" ? 1 : 0}"
+        self.__resources[resource_type][resource_id] = this_resource_content
+        return self
+
+    def to_json(self):
+        td = TerraformDictBuilder(). \
+            add_optional_if(lambda: len(list(self.__variables.keys())) > 0, "variable", lambda: self.__variables). \
+            add_optional_if(lambda: len(list(self.__resources.keys())) > 0, "resource", lambda: self.__resources).\
+            to_dict()
+        return json.dumps(td, indent=4, sort_keys=True)

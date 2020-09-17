@@ -5,16 +5,16 @@ import fnmatch
 from abc import ABC
 from functools import reduce
 from pathlib import Path
-from typing import List, Callable, Generator, Any, Dict, Optional
+from typing import List, Callable, Generator, Any, Dict
 
 from databricks_cli.sdk import ApiClient
 from streamz import Stream
 from tenacity import wait_fixed, retry
 
 from databricks_terraformer import log
+from databricks_terraformer.sdk.hcl.json_to_hcl import TerraformJsonBuilder
 from databricks_terraformer.sdk.message import HCLConvertData, APIData, Artifact
-from databricks_terraformer.sdk.processor import Processor, BasicAnnotationProcessor, \
-    ResourceVariableBasicAnnotationProcessor, MappedGrokVariableBasicAnnotationProcessor
+from databricks_terraformer.sdk.processor import Processor, MappedGrokVariableBasicAnnotationProcessor
 from databricks_terraformer.sdk.utils import normalize
 
 
@@ -22,19 +22,13 @@ class APIGenerator(abc.ABC):
 
     def __init__(self, api_client: ApiClient, base_path: Path,
                  patterns=None,
-                 custom_map_vars=None,
-                 custom_dynamic_vars=None
                  ):
-        self._resource_var_dot_paths_override = custom_dynamic_vars or []
-        self._map_var_dot_paths_override = custom_map_vars or {}
         self._patterns = patterns or []
         self._base_path = base_path
         self.__api_client = api_client
         self._is_dask_enabled = False
         self._buffer = 8
-        self.source = Stream(stream_name=self.resource_name)
-
-        self._validate_dot_paths()
+        self.source = Stream(stream_name=self.folder_name)
 
     def set_dask_conf(self, is_dask_enabled=True, buffer=8):
         self._is_dask_enabled = is_dask_enabled
@@ -48,83 +42,33 @@ class APIGenerator(abc.ABC):
 
     @property
     @abc.abstractmethod
-    def resource_name(self) -> str:
+    def folder_name(self) -> str:
         pass
 
     @staticmethod
-    def __wrap_tf_suffix(file_name: str) -> str:
-        return file_name + ".tf"
+    def __add_tf_suffix(file_name: str) -> str:
+        return file_name + ".tf.json"
 
     def get_local_hcl_path(self, file_name):
         return ExportFileUtils.make_local_path(
             self._base_path,
-            self.resource_folder_name,
-            self.__wrap_tf_suffix(file_name)
+            self.folder_name,
+            self.__add_tf_suffix(file_name)
         )
 
     @property
     def resource_folder_name(self):
-        return self.resource_name.replace("databricks_", "")
+        return self.folder_name.replace("databricks_", "")
 
     @property
     def api_client(self):
         return self.__api_client
 
-    @property
-    @abc.abstractmethod
-    def _annotation_dot_paths(self) -> Dict[str, List[str]]:
-        pass
-
-    @property
-    def annotation_dot_paths(self) -> Dict[str, List[str]]:
-        return {key: list(set(dot_paths)) for key, dot_paths in self._annotation_dot_paths.items()}
-
-    @property
-    @abc.abstractmethod
-    def _resource_var_dot_paths(self) -> List[str]:
-        pass
-
-    @property
-    def resource_var_dot_paths(self) -> List[str]:
-        return list(set(self._resource_var_dot_paths + self._resource_var_dot_paths_override))
-
-    @property
-    @abc.abstractmethod
-    def _map_var_dot_path_dict(self) -> Optional[Dict[str, Optional[str]]]:
-        pass
-
-    @property
-    def map_var_dot_path_dict(self) -> Dict[str, Optional[str]]:
-        return {**(self._map_var_dot_path_dict or {}), **self._map_var_dot_paths_override}
-
-    def _validate_dot_paths(self):
-        error_msg = []
-        possible_dot_paths = [list(self.map_var_dot_path_dict.keys()), self.resource_var_dot_paths]
-        keys = ["property: map_var_dot_paths", "property: resource_var_dot_paths"]
-        for key, paths in self.annotation_dot_paths.items():
-            possible_dot_paths.append(paths)
-            keys.append(f"property: {key}_dot_path")
-
-        for i in range(0, len(possible_dot_paths) - 1):
-            for j in range(i + 1, len(possible_dot_paths)):
-                overlap = set(possible_dot_paths[i]) & set(possible_dot_paths[j])
-                if len(list(overlap)) > 0:
-                    error_msg.append(f"found overlap of values: {str(list(overlap))} between "
-                                     f"{keys[i]}: {possible_dot_paths[i]} and {keys[j]}: {possible_dot_paths[j]}")
-        if len(error_msg) > 0:
-            raise AttributeError("\n".join(error_msg))
-
-    @property
-    def processors(self) -> List[Processor]:
+    def map_processors(self, map_var_dot_path_dict) -> List[Processor]:
         processors = []
-        for key, dot_paths in self.annotation_dot_paths.items():
-            processors.append(BasicAnnotationProcessor(key, dot_paths=dot_paths))
-        if len(self.resource_var_dot_paths) > 0:
-            processors.append(ResourceVariableBasicAnnotationProcessor(self.resource_name,
-                                                                       dot_paths=self.resource_var_dot_paths))
-        if len(list(self.map_var_dot_path_dict.keys())) > 0:
-            processors.append(MappedGrokVariableBasicAnnotationProcessor(self.resource_name,
-                                                                         dot_path_grok_dict=self.map_var_dot_path_dict))
+        if map_var_dot_path_dict is not None and len(list(map_var_dot_path_dict.keys())) > 0:
+            processors.append(MappedGrokVariableBasicAnnotationProcessor(self.folder_name,
+                                                                         dot_path_grok_dict=map_var_dot_path_dict))
         return processors
 
     def create_stream(self):
@@ -136,42 +80,44 @@ class APIGenerator(abc.ABC):
 
     async def generate(self):
         async for item in self._generate():
-            # TODO: should this be all or any? Should all patterns be met before it does not pass?
-            if all([self._match_patterns(pattern_path) for pattern_path in self.get_pattern_dot_paths(item)]) is False:
-                continue
-            identifier = self.get_identifier(item)
-            api_data = APIData(
-                self.get_raw_id(item),
-                self.api_client.url,
-                self._define_identifier(item),
-                self.make_hcl_dict(item),
-                self.get_local_hcl_path(identifier))
-            processed_api_data = self.post_process_api_data_hook(item, api_data)
-            yield HCLConvertData(self.resource_name, processed_api_data, processors=self.processors)
+            yield item
 
     @abc.abstractmethod
     async def _generate(self) -> Generator[APIData, None, None]:
         pass
 
+    def _create_data(self,
+                    resource_type: str,
+                    data: Dict[str, Any],
+                    filter_func: Callable[[], bool],
+                    identifier_func: Callable[[Dict[str, Any]], str],
+                    raw_id_func: Callable[[Dict[str, Any]], str],
+                    make_dict_func: Callable[[Dict[str, Any]], Dict[str, Any]],
+                    processors
+                    ):
+        if filter_func():
+            return None
+        identifier = identifier_func(data)  # normalizes the identifier
+        api_data = APIData(
+            self.get_raw_id(data, raw_id_func),
+            self.api_client.url,
+            identifier,
+            make_dict_func(data),
+            self.get_local_hcl_path(identifier))
+        processed_api_data = self.post_process_api_data_hook(data, api_data)
+        return HCLConvertData(resource_type, processed_api_data,
+                              processors=processors)
+
     @normalize
-    def get_identifier(self, data: Dict[str, Any]) -> str:
-        return self._define_identifier(data)
+    def get_identifier(self, data: Dict[str, Any], data_func: Callable[[Dict[str, Any]], str]) -> str:
+        return data_func(data)
 
-    @abc.abstractmethod
-    def _define_identifier(self, data: Dict[str, Any]) -> str:
-        pass
-
-    @abc.abstractmethod
-    def get_raw_id(self, data: Dict[str, Any]) -> str:
-        pass
+    def get_raw_id(self, data: Dict[str, Any], data_func: Callable[[Dict[str, Any]], str]) -> str:
+        return data_func(data)
 
     def get_pattern_dot_paths(self, data: Dict[str, Any]) -> List[str]:
         # Default is raw_id, else it should be overridden
         return [self.get_raw_id(data)]
-
-    @abc.abstractmethod
-    def make_hcl_dict(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        pass
 
     def post_process_api_data_hook(self, data: Dict[str, Any], api_data: APIData) -> APIData:
         return api_data
@@ -225,7 +171,7 @@ class ExportFileUtils:
     def make_mapped_vars_path(base_path: str) -> Path:
         dir_path = Path(base_path) / ExportFileUtils.BASE_DIRECTORY
         ExportFileUtils.__ensure_parent_dirs(dir_path)
-        return dir_path / "mapped_variables.tf"
+        return dir_path / "mapped_variables.tf.json"
 
     @staticmethod
     def make_local_data_path(base_path: Path, sub_dir: str, file_name) -> Path:
@@ -254,7 +200,7 @@ class DownloaderAPIGenerator(APIGenerator, ABC):
         for artifact in hcl_convert_data.artifacts:
             content = artifact.get_content()
             log.info("Content fetched :-) for " + artifact.remote_path + " with length " +
-                  str(len(content)))
+                     str(len(content)))
             ExportFileUtils.add_file(artifact.local_path, content)
         return hcl_convert_data
 
@@ -293,7 +239,7 @@ def before_retry(fn, attempt_number):
 class Pipeline:
 
     def __init__(self, generators: List[APIGenerator], base_path: str, sinks=None,
-                 dask_client = None, debug_mode=False, ):
+                 dask_client=None, debug_mode=False, ):
         self._base_path = base_path
         self.__dask_client = dask_client
         self.__debug_mode = debug_mode
@@ -325,7 +271,11 @@ class Pipeline:
     @staticmethod
     @HCLConvertData.manage_error
     def mapped_variables_unique_key(hcl_convert_data: HCLConvertData) -> str:
-        return "\n".join([mapped_var.to_hcl(False) for mapped_var in hcl_convert_data.mapped_variables])
+        tjb = TerraformJsonBuilder()
+        for mapped_var in hcl_convert_data.mapped_variables:
+            tjb.add_variable(mapped_var.variable_name, mapped_var.to_dict())
+        return tjb.to_json()
+        # return "\n".join([mapped_var.to_hcl(False) for mapped_var in hcl_convert_data.mapped_variables])
 
     @staticmethod
     @HCLConvertData.manage_error
@@ -340,14 +290,19 @@ class Pipeline:
     def make_mapped_variables_handler(base_path, debug: bool):
         @HCLConvertData.manage_error
         def _save_mapped_variables(hcl_convert_data_list: List[HCLConvertData]):
-            mapped_variables_hcl_data = []
+            # mapped_variables_hcl_data = []
+            # for hcl_convert_data in hcl_convert_data_list:
+            #     mapped_variables_hcl_data += mapped_variables_hcl_data + \
+            #                                  [mapped_var.to_hcl(debug) for mapped_var in
+            #                                   hcl_convert_data.mapped_variables]
+            # mapped_variables_hcl = "\n".join(list(sorted(mapped_variables_hcl_data)))
+            tjb = TerraformJsonBuilder()
             for hcl_convert_data in hcl_convert_data_list:
-                mapped_variables_hcl_data += mapped_variables_hcl_data + \
-                                             [mapped_var.to_hcl(debug) for mapped_var in
-                                              hcl_convert_data.mapped_variables]
-            mapped_variables_hcl = "\n".join(list(sorted(mapped_variables_hcl_data)))
+                for mapped_var in hcl_convert_data.mapped_variables:
+                    tjb.add_variable(mapped_var.variable_name, mapped_var.to_dict())
+            mapped_variables_json = tjb.to_json()
             with ExportFileUtils.make_mapped_vars_path(base_path).open("w+") as f:
-                f.write(mapped_variables_hcl)
+                f.write(mapped_variables_json)
                 f.flush()
             return hcl_convert_data_list
 
